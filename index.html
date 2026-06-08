@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ShadeMatch — Crown Shade Selector</title>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --card: #ffffff;
+    --ink: #1f2933;
+    --muted: #647084;
+    --line: #e2e8f0;
+    --accent: #0d9488;
+    --accent-dark: #0f766e;
+    --accent-soft: #ccfbf1;
+    --shadow: 0 1px 3px rgba(15,23,42,.08), 0 8px 24px rgba(15,23,42,.06);
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent));
+    color: #fff;
+    padding: 28px 20px 22px;
+    text-align: center;
+  }
+  header h1 { margin: 0; font-size: 1.7rem; letter-spacing: -.02em; }
+  header p { margin: 6px 0 0; opacity: .92; font-size: .95rem; }
+  nav {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;
+    background: var(--card);
+    padding: 8px;
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 2px 6px rgba(15,23,42,.04);
+  }
+  nav button {
+    border: 0; background: transparent; color: var(--muted);
+    font-size: .9rem; font-weight: 600; padding: 9px 14px;
+    border-radius: 9px; cursor: pointer; transition: .15s;
+  }
+  nav button:hover { background: var(--bg); color: var(--ink); }
+  nav button.active { background: var(--accent-soft); color: var(--accent-dark); }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 80px; }
+  .panel { display: none; animation: fade .25s ease; }
+  .panel.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow);
+    margin-bottom: 18px;
+  }
+  h2 { font-size: 1.25rem; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); font-size: .92rem; margin: 0 0 16px; }
+  h3 { font-size: 1.02rem; margin: 18px 0 8px; }
+
+  /* Shade swatches */
+  .group-label {
+    display: inline-block; font-size: .78rem; font-weight: 700;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+    margin: 14px 0 8px;
+  }
+  .swatch-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 10px;
+  }
+  .swatch {
+    border-radius: 12px; overflow: hidden; cursor: pointer;
+    border: 2px solid transparent; transition: .15s; background: #fff;
+    box-shadow: 0 1px 2px rgba(15,23,42,.1);
+  }
+  .swatch:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .swatch.selected { border-color: var(--accent); }
+  .swatch .tooth {
+    height: 84px; display: flex; align-items: flex-end; justify-content: center;
+    position: relative;
+  }
+  .swatch .tooth svg { width: 54px; height: 72px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.15)); }
+  .swatch .meta { padding: 7px 8px; text-align: center; }
+  .swatch .code { font-weight: 700; font-size: .92rem; }
+  .swatch .desc { font-size: .7rem; color: var(--muted); line-height: 1.25; }
+
+  /* Controls */
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
+  select, input[type=text] {
+    font: inherit; padding: 8px 11px; border: 1px solid var(--line);
+    border-radius: 9px; background: #fff; color: var(--ink);
+  }
+  label.fld { font-size: .85rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+  .btn {
+    border: 0; background: var(--accent); color: #fff; font-weight: 600;
+    font-size: .92rem; padding: 10px 16px; border-radius: 9px; cursor: pointer;
+    transition: .15s;
+  }
+  .btn:hover { background: var(--accent-dark); }
+  .btn.ghost { background: transparent; color: var(--accent-dark); border: 1px solid var(--accent); }
+  .btn.ghost:hover { background: var(--accent-soft); }
+
+  /* Compare */
+  .compare-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .compare-cell { text-align: center; }
+  .compare-tooth {
+    height: 180px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--line);
+  }
+  .compare-tooth svg { width: 96px; height: 130px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.18)); }
+  .bg-pick { display: flex; gap: 6px; justify-content: center; margin: 12px 0; }
+  .bg-pick button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; }
+  .bg-pick button.active { border-color: var(--accent); transform: scale(1.12); }
+
+  /* Quiz */
+  .q { margin-bottom: 18px; }
+  .q p { font-weight: 600; margin: 0 0 8px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .opt {
+    border: 1px solid var(--line); background: #fff; border-radius: 9px;
+    padding: 9px 13px; cursor: pointer; font-size: .9rem; transition: .15s;
+  }
+  .opt:hover { border-color: var(--accent); }
+  .opt.sel { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-dark); font-weight: 600; }
+  .result {
+    margin-top: 16px; padding: 18px; border-radius: 12px;
+    background: var(--accent-soft); border: 1px solid #99f6e4; display: none;
+  }
+  .result.show { display: block; }
+  .result .big { font-size: 1.6rem; font-weight: 800; color: var(--accent-dark); }
+
+  /* Checklist */
+  ul.check { list-style: none; padding: 0; margin: 0; }
+  ul.check li {
+    display: flex; gap: 10px; align-items: flex-start; padding: 9px 0;
+    border-bottom: 1px solid var(--line); font-size: .94rem;
+  }
+  ul.check li:last-child { border-bottom: 0; }
+  ul.check input { margin-top: 4px; width: 17px; height: 17px; accent-color: var(--accent); }
+  .tip { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .tip:last-child { border-bottom: 0; }
+  .tip .ico { font-size: 1.4rem; flex-shrink: 0; }
+  .tip h4 { margin: 0 0 2px; font-size: .98rem; }
+  .tip p { margin: 0; color: var(--muted); font-size: .88rem; }
+
+  .saved-banner {
+    background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46;
+    border-radius: 10px; padding: 12px 14px; font-size: .9rem; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .note { font-size: .82rem; color: var(--muted); }
+  textarea {
+    width: 100%; font: inherit; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 9px; resize: vertical; min-height: 70px;
+  }
+  .disclaimer {
+    font-size: .8rem; color: var(--muted); text-align: center; max-width: 640px;
+    margin: 30px auto 0; line-height: 1.5;
+  }
+  @media (max-width: 520px) {
+    .compare-row { grid-template-columns: 1fr; }
+  }
+
+  /* Try On */
+  .try-empty { text-align: center; padding: 26px 0; }
+  .canvas-wrap {
+    position: relative; width: 100%; background: #eef2f5;
+    border-radius: 12px; overflow: hidden; display: flex; justify-content: center;
+    min-height: 120px;
+  }
+  #tryCanvas { max-width: 100%; touch-action: none; cursor: crosshair; display: block; }
+  .try-controls { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 6px; }
+  .try-controls .fld { flex: 1; min-width: 130px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .btn.active-mode { box-shadow: 0 0 0 3px var(--accent-soft); }
+  .controls { margin-top: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🦷 ShadeMatch</h1>
+  <p>Choose the right crown shade with confidence</p>
+</header>
+
+<nav>
+  <button data-tab="guide" class="active">Shade Guide</button>
+  <button data-tab="finder">Shade Finder</button>
+  <button data-tab="compare">Compare</button>
+  <button data-tab="tryon">Try On</button>
+  <button data-tab="myshade">My Shade</button>
+  <button data-tab="tips">Prep Tips</button>
+</nav>
+
+<main>
+  <!-- ===== SHADE GUIDE ===== -->
+  <section class="panel active" id="guide">
+    <div class="card">
+      <h2>VITA Classical Shade Guide</h2>
+      <p class="sub">The standard reference dentists use. Shades are grouped by hue family, then ordered light → dark within each. Tap a tooth to see details and set it as your candidate shade.</p>
+      <div class="controls">
+        <label class="fld">Sort
+          <select id="sortMode">
+            <option value="family">By hue family (A–D)</option>
+            <option value="value">By brightness (lightest first)</option>
+          </select>
+        </label>
+      </div>
+      <div id="guideArea"></div>
+    </div>
+    <div class="card" id="detailCard" style="display:none">
+      <h2 id="dCode"></h2>
+      <p class="sub" id="dFamily"></p>
+      <p id="dDesc" style="margin-top:0"></p>
+      <button class="btn" id="setCandidate">★ Set as my candidate shade</button>
+    </div>
+  </section>
+
+  <!-- ===== SHADE FINDER ===== -->
+  <section class="panel" id="finder">
+    <div class="card">
+      <h2>Guided Shade Finder</h2>
+      <p class="sub">Answer a few questions and we'll suggest a starting shade range to discuss with your dentist. This is a guide, not a substitute for an in-person match.</p>
+      <div id="quizArea"></div>
+      <button class="btn" id="quizBtn">See my suggested shade</button>
+      <div class="result" id="quizResult">
+        <div class="note">Suggested starting point</div>
+        <div class="big" id="quizShade"></div>
+        <p id="quizReason" style="margin:6px 0 0"></p>
+        <button class="btn ghost" id="useSuggested" style="margin-top:12px">Use this as my candidate shade</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== COMPARE ===== -->
+  <section class="panel" id="compare">
+    <div class="card">
+      <h2>Side-by-Side Compare</h2>
+      <p class="sub">Hold a candidate crown shade next to a neighboring tooth shade. Crowns usually look best matching or one step from your adjacent natural teeth. Try different backgrounds — shade perception shifts with surroundings.</p>
+      <div class="controls" style="justify-content:space-between">
+        <label class="fld">Crown candidate
+          <select id="cmpLeft"></select>
+        </label>
+        <label class="fld">Neighbor tooth
+          <select id="cmpRight"></select>
+        </label>
+      </div>
+      <div class="bg-pick" id="bgPick"></div>
+      <div class="compare-row">
+        <div class="compare-cell">
+          <div class="compare-tooth" id="leftTooth"></div>
+          <strong id="leftCode"></strong>
+        </div>
+        <div class="compare-cell">
+          <div class="compare-tooth" id="rightTooth"></div>
+          <strong id="rightCode"></strong>
+        </div>
+      </div>
+      <p class="note" id="cmpVerdict" style="text-align:center;margin-top:14px"></p>
+    </div>
+  </section>
+
+  <!-- ===== TRY ON ===== -->
+  <section class="panel" id="tryon">
+    <div class="card">
+      <h2>Try a Shade On Your Smile</h2>
+      <p class="sub">Take or upload a photo of your smile, brush over your teeth to mark them, then preview any shade right on them. Your photo never leaves your device — everything happens in your browser.</p>
+      <input type="file" id="tryFile" accept="image/*" capture="user" hidden />
+      <div id="tryEmpty" class="try-empty">
+        <button class="btn" id="tryPick">📷 Take or choose a photo</button>
+        <p class="note" style="margin-top:12px">Tip: smile naturally in good daylight, facing a window, with no lipstick.</p>
+      </div>
+      <div id="tryStage" style="display:none">
+        <div class="canvas-wrap"><canvas id="tryCanvas"></canvas></div>
+        <div class="try-controls">
+          <label class="fld">Shade
+            <select id="tryShade"></select>
+          </label>
+          <label class="fld">Brush size
+            <input type="range" id="brush" min="6" max="70" value="22" />
+          </label>
+          <label class="fld">Intensity
+            <input type="range" id="intensity" min="0" max="100" value="80" />
+          </label>
+        </div>
+        <div class="controls">
+          <button class="btn" id="modePaint">🖌 Paint teeth</button>
+          <button class="btn ghost" id="modeErase">Erase</button>
+          <button class="btn ghost" id="clearMask">Clear marks</button>
+          <button class="btn ghost" id="holdBefore">👁 Hold for before</button>
+        </div>
+        <div class="controls">
+          <button class="btn" id="trySave">⬇ Save image</button>
+          <button class="btn ghost" id="tryNew">Use another photo</button>
+        </div>
+        <p class="note">Brush over only the teeth you want to match — they'll recolor as you paint. Use Erase to fix gums or lips. This is a visual approximation to guide your eye, not a clinical match.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== MY SHADE ===== -->
+  <section class="panel" id="myshade">
+    <div class="card">
+      <h2>My Shade Summary</h2>
+      <p class="sub">Everything saved here stays on your device. Bring it to your appointment.</p>
+      <div class="saved-banner" id="candBanner">No candidate shade chosen yet — pick one in the Shade Guide or Finder.</div>
+      <h3>Notes &amp; preferences</h3>
+      <textarea id="notes" placeholder="e.g. I want it to match my upper left tooth. Slightly brighter is fine. I drink coffee daily."></textarea>
+      <div class="controls" style="margin-top:12px">
+        <button class="btn" id="saveNotes">Save notes</button>
+        <button class="btn ghost" id="printSummary">Print / save as PDF</button>
+        <button class="btn ghost" id="clearAll">Clear saved data</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Questions to ask your dentist</h3>
+      <ul class="check" id="questionList"></ul>
+    </div>
+  </section>
+
+  <!-- ===== TIPS ===== -->
+  <section class="panel" id="tips">
+    <div class="card">
+      <h2>How to Pick a Shade That Looks Natural</h2>
+      <p class="sub">Shade matching is part science, part art. These tips help you and your dentist get it right the first time.</p>
+      <div id="tipsArea"></div>
+    </div>
+  </section>
+
+  <p class="disclaimer">
+    ShadeMatch is an educational tool to help you prepare for a conversation with your dental professional.
+    On-screen colors are approximations and vary by display — they cannot replace a physical shade tab held against your teeth in your dentist's chair.
+  </p>
+</main>
+
+<script>
+/* ---------- VITA Classical shade data ----------
+   Hex values are widely-cited sRGB approximations for on-screen reference only. */
+const SHADES = [
+  // family A — reddish-brown
+  { code:"A1", family:"A — Reddish-brown", value:1, hex:"#E6DDCB", desc:"Very light, warm. A bright, youthful natural white." },
+  { code:"A2", family:"A — Reddish-brown", value:4, hex:"#DDCFB4", desc:"Light warm — one of the most common natural tooth shades for adults." },
+  { code:"A3", family:"A — Reddish-brown", value:7, hex:"#D2BE9A", desc:"Medium warm. The single most common natural adult shade." },
+  { code:"A3.5", family:"A — Reddish-brown", value:9, hex:"#C8B084", desc:"Medium-dark warm, slightly more saturated than A3." },
+  { code:"A4", family:"A — Reddish-brown", value:12, hex:"#BBA070", desc:"Dark, warm and saturated." },
+  // family B — reddish-yellow
+  { code:"B1", family:"B — Reddish-yellow", value:2, hex:"#E8E2CC", desc:"The lightest, brightest natural shade — slightly cooler than A1." },
+  { code:"B2", family:"B — Reddish-yellow", value:5, hex:"#DCD2B0", desc:"Light, gently yellow." },
+  { code:"B3", family:"B — Reddish-yellow", value:8, hex:"#CFC094", desc:"Medium yellow tone." },
+  { code:"B4", family:"B — Reddish-yellow", value:11, hex:"#C2AF7C", desc:"Darker yellow tone." },
+  // family C — grey
+  { code:"C1", family:"C — Grey", value:3, hex:"#D7D2C2", desc:"Light with a grey cast — cooler looking." },
+  { code:"C2", family:"C — Grey", value:6, hex:"#C7BFAA", desc:"Medium grey tone." },
+  { code:"C3", family:"C — Grey", value:10, hex:"#B8AE94", desc:"Medium-dark grey tone." },
+  { code:"C4", family:"C — Grey", value:13, hex:"#A89B7E", desc:"Dark grey tone." },
+  // family D — reddish-grey
+  { code:"D2", family:"D — Reddish-grey", value:5, hex:"#D4CBB6", desc:"Light reddish-grey." },
+  { code:"D3", family:"D — Reddish-grey", value:8, hex:"#C6BAA0", desc:"Medium reddish-grey." },
+  { code:"D4", family:"D — Reddish-grey", value:10, hex:"#BBAD90", desc:"Medium-dark reddish-grey." }
+];
+const byCode = c => SHADES.find(s => s.code === c);
+
+/* Tooth SVG, fillable */
+function toothSVG(hex, w) {
+  return `<svg viewBox="0 0 60 80" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M30 2 C44 2 56 10 56 28 C56 46 50 66 42 76 C39 79 35 74 33 64 C32 58 28 58 27 64 C25 74 21 79 18 76 C10 66 4 46 4 28 C4 10 16 2 30 2 Z"
+      fill="${hex}" stroke="rgba(0,0,0,.12)" stroke-width="1"/>
+    <path d="M30 6 C40 6 49 12 51 24 C44 18 36 16 30 16 C24 16 16 18 9 24 C11 12 20 6 30 6 Z"
+      fill="rgba(255,255,255,.28)"/>
+  </svg>`;
+}
+
+/* ---------- State (persisted) ---------- */
+const STORE = "shadematch_v1";
+let state = { candidate: null, notes: "", checked: {} };
+try { Object.assign(state, JSON.parse(localStorage.getItem(STORE) || "{}")); } catch(e){}
+function save(){ localStorage.setItem(STORE, JSON.stringify(state)); }
+
+/* ---------- Tabs ---------- */
+const tabs = document.querySelectorAll("nav button");
+const panels = document.querySelectorAll(".panel");
+tabs.forEach(b => b.onclick = () => {
+  tabs.forEach(x => x.classList.remove("active"));
+  panels.forEach(p => p.classList.remove("active"));
+  b.classList.add("active");
+  document.getElementById(b.dataset.tab).classList.add("active");
+  if (b.dataset.tab === "myshade") renderMyShade();
+});
+
+/* ---------- Shade guide ---------- */
+const guideArea = document.getElementById("guideArea");
+function renderGuide() {
+  const mode = document.getElementById("sortMode").value;
+  guideArea.innerHTML = "";
+  if (mode === "value") {
+    const sorted = [...SHADES].sort((a,b) => a.value - b.value);
+    const grid = document.createElement("div");
+    grid.className = "swatch-grid";
+    sorted.forEach(s => grid.appendChild(swatchEl(s)));
+    guideArea.appendChild(grid);
+  } else {
+    const families = [...new Set(SHADES.map(s => s.family))];
+    families.forEach(f => {
+      const label = document.createElement("div");
+      label.className = "group-label";
+      label.textContent = f;
+      guideArea.appendChild(label);
+      const grid = document.createElement("div");
+      grid.className = "swatch-grid";
+      SHADES.filter(s => s.family === f).forEach(s => grid.appendChild(swatchEl(s)));
+      guideArea.appendChild(grid);
+    });
+  }
+}
+function swatchEl(s) {
+  const el = document.createElement("div");
+  el.className = "swatch" + (state.candidate === s.code ? " selected" : "");
+  el.innerHTML = `<div class="tooth">${toothSVG(s.hex)}</div>
+    <div class="meta"><div class="code">${s.code}</div><div class="desc">${s.family.split(" — ")[0]}</div></div>`;
+  el.onclick = () => showDetail(s);
+  return el;
+}
+let detailShade = null;
+function showDetail(s) {
+  detailShade = s;
+  document.getElementById("detailCard").style.display = "block";
+  document.getElementById("dCode").textContent = "Shade " + s.code;
+  document.getElementById("dFamily").textContent = s.family + " · brightness rank " + s.value + " of 13";
+  document.getElementById("dDesc").textContent = s.desc;
+  document.getElementById("detailCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+document.getElementById("setCandidate").onclick = () => {
+  if (detailShade) { setCandidate(detailShade.code); renderGuide(); }
+};
+document.getElementById("sortMode").onchange = renderGuide;
+
+function setCandidate(code) {
+  state.candidate = code; save();
+  const note = "✓ " + code + " saved as your candidate shade. See it in \"My Shade\".";
+  flash(note);
+}
+function flash(msg) {
+  let f = document.getElementById("flash");
+  if (!f) {
+    f = document.createElement("div");
+    f.id = "flash";
+    f.style.cssText = "position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0f766e;color:#fff;padding:12px 18px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.2);z-index:50;font-size:.9rem";
+    document.body.appendChild(f);
+  }
+  f.textContent = msg;
+  f.style.opacity = "1";
+  clearTimeout(f._t);
+  f._t = setTimeout(() => { f.style.opacity = "0"; f.style.transition = "opacity .4s"; }, 2200);
+}
+
+/* ---------- Quiz ---------- */
+const QUIZ = [
+  { id:"goal", q:"What look are you going for?",
+    opts:[
+      { t:"Match my natural teeth exactly", v:"match" },
+      { t:"A little brighter than now", v:"brighter" },
+      { t:"As white as natural-looking allows", v:"whitest" }
+    ]},
+  { id:"current", q:"How would you describe your current teeth?",
+    opts:[
+      { t:"Bright / very white", v:"bright" },
+      { t:"Average / natural", v:"avg" },
+      { t:"Yellowish or stained", v:"yellow" },
+      { t:"Greyish", v:"grey" }
+    ]},
+  { id:"age", q:"Your age range (teeth naturally darken with age):",
+    opts:[
+      { t:"Under 30", v:"young" },
+      { t:"30–50", v:"mid" },
+      { t:"Over 50", v:"older" }
+    ]},
+  { id:"whitening", q:"Planning to whiten your other teeth too?",
+    opts:[
+      { t:"Yes, before the crown", v:"yes" },
+      { t:"No", v:"no" },
+      { t:"Not sure", v:"unsure" }
+    ]}
+];
+let answers = {};
+const quizArea = document.getElementById("quizArea");
+function renderQuiz() {
+  quizArea.innerHTML = "";
+  QUIZ.forEach(item => {
+    const wrap = document.createElement("div");
+    wrap.className = "q";
+    wrap.innerHTML = `<p>${item.q}</p>`;
+    const opts = document.createElement("div");
+    opts.className = "opts";
+    item.opts.forEach(o => {
+      const b = document.createElement("button");
+      b.className = "opt" + (answers[item.id] === o.v ? " sel" : "");
+      b.textContent = o.t;
+      b.onclick = () => {
+        answers[item.id] = o.v;
+        renderQuiz();
+      };
+      opts.appendChild(b);
+    });
+    wrap.appendChild(opts);
+    quizArea.appendChild(wrap);
+  });
+}
+document.getElementById("quizBtn").onclick = () => {
+  if (Object.keys(answers).length < QUIZ.length) {
+    flash("Please answer all questions first.");
+    return;
+  }
+  const { shade, reason } = suggestShade(answers);
+  document.getElementById("quizShade").textContent = "Shade " + shade;
+  document.getElementById("quizReason").textContent = reason;
+  document.getElementById("quizResult").classList.add("show");
+  document.getElementById("useSuggested").dataset.shade = shade;
+};
+function suggestShade(a) {
+  // Base brightness rank (lower = lighter) from current teeth + age
+  let rank = 7; // A3 baseline
+  if (a.current === "bright") rank = 2;
+  else if (a.current === "avg") rank = 5;
+  else if (a.current === "yellow") rank = 8;
+  else if (a.current === "grey") rank = 6;
+  if (a.age === "young") rank -= 1;
+  if (a.age === "older") rank += 2;
+  // Goal adjustment
+  if (a.goal === "brighter") rank -= 2;
+  if (a.goal === "whitest") rank -= 4;
+  if (a.goal === "match") rank += 0;
+  // Whitening first means pick a lighter target
+  if (a.whitening === "yes") rank -= 2;
+  rank = Math.max(1, Math.min(13, rank));
+  // Family from undertone
+  let family = "A — Reddish-brown";
+  if (a.current === "grey") family = "C — Grey";
+  if (a.current === "bright" || a.goal === "whitest") family = "B — Reddish-yellow";
+  // Find closest shade in chosen family by value
+  const fam = SHADES.filter(s => s.family === family);
+  let best = fam[0];
+  fam.forEach(s => { if (Math.abs(s.value - rank) < Math.abs(best.value - rank)) best = s; });
+  let reason = "Based on your current shade, age, and goal. ";
+  if (a.goal === "whitest") reason += "We leaned toward a brighter B-family shade — ask your dentist how light still looks natural for your face.";
+  else if (a.goal === "brighter") reason += "A step lighter than your current teeth keeps it natural but noticeably fresher.";
+  else reason += "This aims to blend with your existing teeth so the crown disappears.";
+  if (a.whitening === "yes") reason += " Since you'll whiten first, match the crown to your *whitened* shade, not today's.";
+  return { shade: best.code, reason };
+}
+document.getElementById("useSuggested").onclick = e => {
+  setCandidate(e.target.dataset.shade);
+  flash("✓ Candidate shade set. See \"My Shade\".");
+};
+
+/* ---------- Compare ---------- */
+const cmpLeft = document.getElementById("cmpLeft");
+const cmpRight = document.getElementById("cmpRight");
+SHADES.forEach(s => {
+  cmpLeft.add(new Option(s.code + " — " + s.family.split(" — ")[0], s.code));
+  cmpRight.add(new Option(s.code + " — " + s.family.split(" — ")[0], s.code));
+});
+cmpLeft.value = state.candidate || "A2";
+cmpRight.value = "A2";
+const BGS = ["#fde2e4","#ffe8c8","#e8e8e8","#d8efe0","#3a3a3a","#ffffff"];
+let bgIndex = 2;
+const bgPick = document.getElementById("bgPick");
+BGS.forEach((c,i) => {
+  const b = document.createElement("button");
+  b.style.background = c;
+  b.className = i === bgIndex ? "active" : "";
+  b.onclick = () => { bgIndex = i; renderCompare(); };
+  bgPick.appendChild(b);
+});
+function renderCompare() {
+  bgPick.querySelectorAll("button").forEach((b,i) => b.className = i === bgIndex ? "active" : "");
+  const l = byCode(cmpLeft.value), r = byCode(cmpRight.value);
+  const bg = BGS[bgIndex];
+  ["leftTooth","rightTooth"].forEach((id,i) => {
+    const el = document.getElementById(id);
+    el.style.background = bg;
+    el.innerHTML = toothSVG((i===0?l:r).hex);
+  });
+  document.getElementById("leftCode").textContent = "Crown: " + l.code;
+  document.getElementById("rightCode").textContent = "Neighbor: " + r.code;
+  const diff = Math.abs(l.value - r.value);
+  let v;
+  if (l.code === r.code) v = "Exact match — the crown should blend seamlessly.";
+  else if (diff <= 1) v = "Very close match (within one step). Should look natural to most people.";
+  else if (diff <= 3) v = "Noticeable but subtle difference — fine if you want the crown a touch brighter.";
+  else v = "Big difference — the crown may stand out. Consider whitening your other teeth or moving closer.";
+  if (l.family.split(" — ")[0] !== r.family.split(" — ")[0])
+    v += " Note: different hue families (undertones) can clash even at similar brightness.";
+  document.getElementById("cmpVerdict").textContent = v;
+}
+cmpLeft.onchange = cmpRight.onchange = renderCompare;
+
+/* ---------- My Shade ---------- */
+const QUESTIONS = [
+  "What shade do you recommend for my crown, and why?",
+  "Will you match it to my adjacent teeth in natural daylight?",
+  "Should I whiten my other teeth before the shade is finalized?",
+  "Can the crown be made slightly translucent at the edge like a real tooth?",
+  "Will you take the shade at the start of the visit (before my teeth dry out)?",
+  "Can I see the shade tab against my tooth in a mirror before you finalize?",
+  "How will the crown shade hold up to coffee, tea, or red wine over time?",
+  "Can we use a photo with a shade tab for the lab if needed?"
+];
+function renderMyShade() {
+  const banner = document.getElementById("candBanner");
+  if (state.candidate) {
+    const s = byCode(state.candidate);
+    banner.innerHTML = `<span style="display:inline-flex;width:34px;height:44px">${toothSVG(s.hex)}</span>
+      <strong>Candidate shade: ${s.code}</strong> — ${s.family}`;
+  } else {
+    banner.textContent = "No candidate shade chosen yet — pick one in the Shade Guide or Finder.";
+  }
+  document.getElementById("notes").value = state.notes || "";
+  const list = document.getElementById("questionList");
+  list.innerHTML = "";
+  QUESTIONS.forEach((q,i) => {
+    const li = document.createElement("li");
+    const id = "q" + i;
+    li.innerHTML = `<input type="checkbox" id="${id}" ${state.checked[id] ? "checked":""}/>
+      <label for="${id}">${q}</label>`;
+    li.querySelector("input").onchange = e => { state.checked[id] = e.target.checked; save(); };
+    list.appendChild(li);
+  });
+}
+document.getElementById("saveNotes").onclick = () => {
+  state.notes = document.getElementById("notes").value; save(); flash("Notes saved.");
+};
+document.getElementById("printSummary").onclick = () => window.print();
+document.getElementById("clearAll").onclick = () => {
+  if (confirm("Clear your candidate shade, notes, and checklist?")) {
+    state = { candidate: null, notes: "", checked: {} };
+    save(); renderMyShade(); renderGuide();
+    flash("Cleared.");
+  }
+};
+
+/* ---------- Tips ---------- */
+const TIPS = [
+  ["☀️","Use natural daylight","Match shades near a window in the morning. Office and warm bulbs distort color. Ask your dentist to confirm in daylight if possible."],
+  ["💄","Go bare-faced","Bright lipstick, colorful clothing, and makeup trick the eye. Wear neutral colors and skip bold lip color on appointment day."],
+  ["⏱️","Match early & quickly","Teeth dehydrate and look lighter the longer your mouth stays open. The shade should be picked in the first minutes, before teeth dry out."],
+  ["👀","Trust first impressions","Stare at a tooth for only ~5 seconds. Your eyes fatigue fast — glance, decide, and reset by looking at something blue/grey between comparisons."],
+  ["🦷","Match to neighbors, not ideals","A single crown should match the teeth beside it. If you want a Hollywood-white smile, whiten everything first, then match the crown to the new shade."],
+  ["📸","Photos help the lab","A photo of the shade tab held next to your tooth gives the lab technician extra reference. Ask if they'd like one."],
+  ["🔁","It can't be re-tinted later","Unlike natural teeth, a finished porcelain crown can't be whitened. Get the shade right before it's cemented — ask for a try-in."],
+  ["🍷","Plan for staining","Your natural teeth stain over time but the crown won't. Picking a shade that matches your maintained (not best-ever) color keeps it blending for years."]
+];
+const tipsArea = document.getElementById("tipsArea");
+TIPS.forEach(([ico,h,p]) => {
+  const d = document.createElement("div");
+  d.className = "tip";
+  d.innerHTML = `<div class="ico">${ico}</div><div><h4>${h}</h4><p>${p}</p></div>`;
+  tipsArea.appendChild(d);
+});
+
+/* ---------- Try On ---------- */
+(function(){
+  const fileInput = document.getElementById("tryFile");
+  const empty = document.getElementById("tryEmpty");
+  const stage = document.getElementById("tryStage");
+  const canvas = document.getElementById("tryCanvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const maskCanvas = document.createElement("canvas");
+  const maskCtx = maskCanvas.getContext("2d", { willReadFrequently: true });
+  const shadeSel = document.getElementById("tryShade");
+  const brush = document.getElementById("brush");
+  const intensity = document.getElementById("intensity");
+  let origData = null, painting = false, mode = "paint", rafPending = false, showBefore = false;
+
+  SHADES.forEach(s => shadeSel.add(new Option(s.code + " — " + s.family.split(" — ")[0], s.code)));
+  shadeSel.value = state.candidate || "A2";
+
+  document.getElementById("tryPick").onclick = () => fileInput.click();
+  document.getElementById("tryNew").onclick = () => fileInput.click();
+  fileInput.onchange = e => { const f = e.target.files && e.target.files[0]; if (f) loadImage(f); };
+
+  function loadImage(file) {
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 760;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      w = Math.max(1, Math.round(w * scale));
+      h = Math.max(1, Math.round(h * scale));
+      canvas.width = maskCanvas.width = w;
+      canvas.height = maskCanvas.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      origData = ctx.getImageData(0, 0, w, h);
+      maskCtx.clearRect(0, 0, w, h);
+      empty.style.display = "none";
+      stage.style.display = "block";
+      render();
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => flash("Couldn't load that image — try another.");
+    img.src = URL.createObjectURL(file);
+  }
+
+  function shadeRGB() {
+    const hex = byCode(shadeSel.value).hex;
+    return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+  }
+
+  function render() {
+    if (!origData) return;
+    const out = ctx.createImageData(origData);
+    out.data.set(origData.data);
+    if (!showBefore) {
+      const m = maskCtx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const [sr, sg, sb] = shadeRGB();
+      const sl = (0.299*sr + 0.587*sg + 0.114*sb) || 1;
+      const t0 = intensity.value / 100;
+      const d = out.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const a = m[i + 3];
+        if (!a) continue;
+        const t = t0 * (a / 255);
+        const r = d[i], g = d[i+1], b = d[i+2];
+        const l = 0.299*r + 0.587*g + 0.114*b;     // preserve tooth shading
+        const f = l / sl;
+        const tr = Math.min(255, sr*f), tg = Math.min(255, sg*f), tb = Math.min(255, sb*f);
+        d[i]   = r + (tr - r) * t;
+        d[i+1] = g + (tg - g) * t;
+        d[i+2] = b + (tb - b) * t;
+      }
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+  function scheduleRender() {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => { rafPending = false; render(); });
+  }
+
+  function paintAt(x, y) {
+    const r = +brush.value;
+    maskCtx.globalCompositeOperation = (mode === "erase") ? "destination-out" : "source-over";
+    const grad = maskCtx.createRadialGradient(x, y, 0, x, y, r);
+    if (mode === "erase") {
+      grad.addColorStop(0, "rgba(0,0,0,1)");
+      grad.addColorStop(0.6, "rgba(0,0,0,1)");
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+    } else {
+      grad.addColorStop(0, "rgba(255,255,255,1)");
+      grad.addColorStop(0.6, "rgba(255,255,255,0.9)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+    }
+    maskCtx.fillStyle = grad;
+    maskCtx.beginPath();
+    maskCtx.arc(x, y, r, 0, Math.PI * 2);
+    maskCtx.fill();
+    maskCtx.globalCompositeOperation = "source-over";
+  }
+
+  function pos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return [
+      (e.clientX - rect.left) * canvas.width / rect.width,
+      (e.clientY - rect.top) * canvas.height / rect.height
+    ];
+  }
+  canvas.addEventListener("pointerdown", e => {
+    painting = true;
+    canvas.setPointerCapture(e.pointerId);
+    const [x, y] = pos(e); paintAt(x, y); scheduleRender();
+  });
+  canvas.addEventListener("pointermove", e => {
+    if (!painting) return;
+    const [x, y] = pos(e); paintAt(x, y); scheduleRender();
+  });
+  canvas.addEventListener("pointerup", () => painting = false);
+  canvas.addEventListener("pointercancel", () => painting = false);
+
+  shadeSel.onchange = () => { render(); };
+  intensity.oninput = scheduleRender;
+
+  const paintBtn = document.getElementById("modePaint");
+  const eraseBtn = document.getElementById("modeErase");
+  paintBtn.onclick = () => { mode = "paint"; paintBtn.classList.add("active-mode"); eraseBtn.classList.remove("active-mode"); };
+  eraseBtn.onclick = () => { mode = "erase"; eraseBtn.classList.add("active-mode"); paintBtn.classList.remove("active-mode"); };
+  paintBtn.classList.add("active-mode");
+
+  document.getElementById("clearMask").onclick = () => { maskCtx.clearRect(0, 0, canvas.width, canvas.height); render(); };
+
+  const holdBtn = document.getElementById("holdBefore");
+  holdBtn.addEventListener("pointerdown", () => { showBefore = true; render(); });
+  window.addEventListener("pointerup", () => { if (showBefore) { showBefore = false; render(); } });
+
+  document.getElementById("trySave").onclick = () => {
+    const a = document.createElement("a");
+    a.download = "shadematch-tryon-" + shadeSel.value + ".png";
+    a.href = canvas.toDataURL("image/png");
+    a.click();
+  };
+
+  // Keep try-on shade in sync when opening the tab, if a candidate was set elsewhere
+  document.querySelector('nav button[data-tab="tryon"]').addEventListener("click", () => {
+    if (state.candidate && !origData) shadeSel.value = state.candidate;
+  });
+})();
+
+/* ---------- Init ---------- */
+renderGuide();
+renderQuiz();
+renderCompare();
+renderMyShade();
+</script>
+</body>
+</html>
