@@ -19,6 +19,12 @@ walk in prepared, with a candidate shade in mind and the right questions to ask.
 - **Compare** — Hold your candidate crown shade side-by-side with a neighboring
   tooth shade, against different backgrounds, with a plain-language verdict on
   how well they match.
+- **Try On** — Take or upload a photo of your smile, brush over your teeth to
+  mark them, and preview any shade applied directly to your teeth. A
+  luminance-preserving tint keeps the teeth's natural highlights and shadows so
+  the preview looks realistic. Adjust brush size and intensity, hold to compare
+  before/after, and save the result. Photos are processed entirely in your
+  browser and never uploaded.
 - **My Shade** — Your saved candidate shade, personal notes, and a checklist of
   smart questions to ask your dentist. Print it or save as PDF to bring along.
 - **Prep Tips** — Practical, dentist-approved advice on getting an accurate
