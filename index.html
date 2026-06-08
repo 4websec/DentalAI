@@ -179,6 +179,9 @@
   input[type=range] { width: 100%; accent-color: var(--accent); }
   .btn.active-mode { box-shadow: 0 0 0 3px var(--accent-soft); }
   .controls { margin-top: 6px; }
+  .status { font-size: .85rem; color: var(--accent-dark); min-height: 1.1em; margin: 8px 0 2px; }
+  .status.err { color: #b91c1c; }
+  .btn[disabled] { opacity: .55; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -276,6 +279,11 @@
       </div>
       <div id="tryStage" style="display:none">
         <div class="canvas-wrap"><canvas id="tryCanvas"></canvas></div>
+        <div class="controls">
+          <button class="btn" id="autoDetect">✨ Auto-detect teeth</button>
+          <button class="btn ghost" id="genSmile">🦷 No teeth? Generate a smile</button>
+        </div>
+        <p class="status" id="tryStatus"></p>
         <div class="try-controls">
           <label class="fld">Shade
             <select id="tryShade"></select>
@@ -288,7 +296,7 @@
           </label>
         </div>
         <div class="controls">
-          <button class="btn" id="modePaint">🖌 Paint teeth</button>
+          <button class="btn ghost" id="modePaint">🖌 Touch-up brush</button>
           <button class="btn ghost" id="modeErase">Erase</button>
           <button class="btn ghost" id="clearMask">Clear marks</button>
           <button class="btn ghost" id="holdBefore">👁 Hold for before</button>
@@ -297,7 +305,7 @@
           <button class="btn" id="trySave">⬇ Save image</button>
           <button class="btn ghost" id="tryNew">Use another photo</button>
         </div>
-        <p class="note">Brush over only the teeth you want to match — they'll recolor as you paint. Use Erase to fix gums or lips. This is a visual approximation to guide your eye, not a clinical match.</p>
+        <p class="note"><strong>Auto-detect</strong> finds your teeth automatically; use the touch-up brush only to fix edges. This is a visual approximation to guide your eye, not a clinical match.</p>
       </div>
     </div>
   </section>
@@ -682,26 +690,42 @@ TIPS.forEach(([ico,h,p]) => {
   document.getElementById("tryNew").onclick = () => fileInput.click();
   fileInput.onchange = e => { const f = e.target.files && e.target.files[0]; if (f) loadImage(f); };
 
+  function ingest(img, revoke) {
+    const maxDim = 760;
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const scale = Math.min(1, maxDim / Math.max(w, h));
+    w = Math.max(1, Math.round(w * scale));
+    h = Math.max(1, Math.round(h * scale));
+    canvas.width = maskCanvas.width = w;
+    canvas.height = maskCanvas.height = h;
+    ctx.drawImage(img, 0, 0, w, h);
+    origData = ctx.getImageData(0, 0, w, h);
+    maskCtx.clearRect(0, 0, w, h);
+    empty.style.display = "none";
+    stage.style.display = "block";
+    render();
+    if (revoke) URL.revokeObjectURL(img.src);
+  }
   function loadImage(file) {
     const img = new Image();
-    img.onload = () => {
-      const maxDim = 760;
-      let w = img.naturalWidth, h = img.naturalHeight;
-      const scale = Math.min(1, maxDim / Math.max(w, h));
-      w = Math.max(1, Math.round(w * scale));
-      h = Math.max(1, Math.round(h * scale));
-      canvas.width = maskCanvas.width = w;
-      canvas.height = maskCanvas.height = h;
-      ctx.drawImage(img, 0, 0, w, h);
-      origData = ctx.getImageData(0, 0, w, h);
-      maskCtx.clearRect(0, 0, w, h);
-      empty.style.display = "none";
-      stage.style.display = "block";
-      render();
-      URL.revokeObjectURL(img.src);
-    };
+    img.onload = () => ingest(img, true);
     img.onerror = () => flash("Couldn't load that image — try another.");
     img.src = URL.createObjectURL(file);
+  }
+  function loadFromSrc(src) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => { ingest(img, false); res(); };
+      img.onerror = rej;
+      img.src = src;
+    });
+  }
+  // Untinted copy of the current photo, for AI analysis
+  function srcCanvas() {
+    const c = document.createElement("canvas");
+    c.width = canvas.width; c.height = canvas.height;
+    c.getContext("2d").putImageData(origData, 0, 0);
+    return c;
   }
 
   function shadeRGB() {
@@ -805,6 +829,173 @@ TIPS.forEach(([ico,h,p]) => {
   document.querySelector('nav button[data-tab="tryon"]').addEventListener("click", () => {
     if (state.candidate && !origData) shadeSel.value = state.candidate;
   });
+
+  /* ----- status helper ----- */
+  const statusEl = document.getElementById("tryStatus");
+  function status(msg, isErr) {
+    statusEl.textContent = msg || "";
+    statusEl.classList.toggle("err", !!isErr);
+  }
+
+  /* ----- MediaPipe face landmark loader (lazy, on-device) ----- */
+  const MPVER = "0.10.18";
+  let landmarker = null, mpLoading = null;
+  function loadLandmarker() {
+    if (landmarker) return Promise.resolve(landmarker);
+    if (mpLoading) return mpLoading;
+    status("Loading the on-device face model (first time only)…");
+    mpLoading = (async () => {
+      const vision = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MPVER}/vision_bundle.mjs`);
+      const fileset = await vision.FilesetResolver.forVisionTasks(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MPVER}/wasm`);
+      landmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" },
+        runningMode: "IMAGE",
+        numFaces: 1
+      });
+      return landmarker;
+    })();
+    return mpLoading;
+  }
+
+  // Inner-lip landmark ring (the mouth opening) on the MediaPipe face mesh
+  const INNER_MOUTH = [78,191,80,81,82,13,312,311,310,415,308,324,318,402,317,14,87,178,88,95];
+
+  function mouthPolygon(landmarks) {
+    return INNER_MOUTH.map(i => ({ x: landmarks[i].x * canvas.width, y: landmarks[i].y * canvas.height }));
+  }
+  // Filled polygon alpha map (Uint8) for "inside the mouth" tests
+  function polygonAlpha(poly, grow) {
+    const t = document.createElement("canvas");
+    t.width = canvas.width; t.height = canvas.height;
+    const tc = t.getContext("2d");
+    tc.fillStyle = "#fff";
+    if (grow) { tc.lineJoin = "round"; tc.strokeStyle = "#fff"; tc.lineWidth = grow * 2; }
+    tc.beginPath();
+    poly.forEach((p, i) => i ? tc.lineTo(p.x, p.y) : tc.moveTo(p.x, p.y));
+    tc.closePath();
+    tc.fill();
+    if (grow) tc.stroke();
+    return tc.getImageData(0, 0, t.width, t.height).data;
+  }
+  function isTooth(r, g, b) {
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    const v = mx / 255, s = mx === 0 ? 0 : (mx - mn) / mx;
+    const reddish = r > g * 1.25 && r > b * 1.4;     // gums, lips, tongue
+    return v > 0.5 && s < 0.45 && !reddish;
+  }
+
+  async function detectFace() {
+    const lm = await loadLandmarker();
+    const res = lm.detect(srcCanvas());
+    if (!res.faceLandmarks || !res.faceLandmarks.length) return null;
+    return res.faceLandmarks[0];
+  }
+
+  /* ----- Auto-detect teeth ----- */
+  document.getElementById("autoDetect").onclick = async () => {
+    if (!origData) return;
+    const btn = document.getElementById("autoDetect");
+    btn.disabled = true;
+    try {
+      const landmarks = await detectFace();
+      if (!landmarks) {
+        status("Couldn't find a face. Make sure your smile is well-lit and facing the camera — or use the touch-up brush.", true);
+        return;
+      }
+      const poly = polygonAlpha(mouthPolygon(landmarks), 2);
+      const o = origData.data;
+      const mask = ctx.createImageData(canvas.width, canvas.height);
+      const md = mask.data;
+      let count = 0;
+      for (let i = 0; i < o.length; i += 4) {
+        if (poly[i + 3] > 0 && isTooth(o[i], o[i+1], o[i+2])) {
+          md[i] = md[i+1] = md[i+2] = 255; md[i+3] = 255;
+          count++;
+        }
+      }
+      maskCtx.putImageData(mask, 0, 0);
+      // soften edges
+      try {
+        maskCtx.globalCompositeOperation = "copy";
+        maskCtx.filter = "blur(1.2px)";
+        maskCtx.drawImage(maskCanvas, 0, 0);
+        maskCtx.filter = "none";
+        maskCtx.globalCompositeOperation = "source-over";
+      } catch (e) {}
+      render();
+      status(count > 200
+        ? "Teeth detected ✓  Tweak with the brush if needed, then pick a shade."
+        : "Found a face but few teeth — are you smiling? Use the brush to mark them.", count <= 200);
+    } catch (e) {
+      status("On-device model couldn't load (needs internet the first time). You can still use the touch-up brush.", true);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  /* ----- AI smile generation (no-teeth case) — requires backend ----- */
+  function genEndpoint() {
+    return (window.SHADEMATCH_GENERATE_URL || localStorage.getItem("sm_gen_endpoint") || "").trim();
+  }
+  document.getElementById("genSmile").onclick = async () => {
+    if (!origData) return;
+    let url = genEndpoint();
+    if (!url) {
+      const entered = prompt(
+        "Photorealistic smile generation runs on a server you deploy (see server/ in the project).\n\n" +
+        "Paste your deployed endpoint URL to enable it (saved on this device only):", "");
+      if (!entered) {
+        status("AI smile generation is off until a backend URL is set. See the server/ setup in the README.", true);
+        return;
+      }
+      localStorage.setItem("sm_gen_endpoint", entered.trim());
+      url = entered.trim();
+    }
+    const btn = document.getElementById("genSmile");
+    btn.disabled = true;
+    try {
+      status("Finding the mouth area…");
+      const landmarks = await detectFace();
+      if (!landmarks) {
+        status("Couldn't find a face/mouth to place teeth into. Face the camera in good light.", true);
+        return;
+      }
+      // Inpaint mask: white where new teeth should be generated (mouth opening, slightly grown)
+      const poly = polygonAlpha(mouthPolygon(landmarks), 4);
+      const mc = document.createElement("canvas");
+      mc.width = canvas.width; mc.height = canvas.height;
+      const mcd = mc.getContext("2d").createImageData(canvas.width, canvas.height);
+      for (let i = 0; i < poly.length; i += 4) {
+        const on = poly[i + 3] > 0 ? 255 : 0;
+        mcd.data[i] = mcd.data[i+1] = mcd.data[i+2] = on; mcd.data[i+3] = 255;
+      }
+      mc.getContext("2d").putImageData(mcd, 0, 0);
+
+      status("Generating a photorealistic smile… this can take a few seconds.");
+      const shade = byCode(shadeSel.value);
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: srcCanvas().toDataURL("image/png"),
+          mask: mc.toDataURL("image/png"),
+          shade: shade.code,
+          shadeHex: shade.hex,
+          prompt: `natural realistic upper and lower teeth, dental crown shade ${shade.code}, healthy gums, photorealistic, matching lighting`
+        })
+      });
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+      const out = data.image || data.imageBase64 || data.result;
+      if (!out) throw new Error("No image in response");
+      await loadFromSrc(out.startsWith("data:") ? out : ("data:image/png;base64," + out));
+      status("Smile generated ✓  Now pick a shade and fine-tune with the brush.");
+    } catch (e) {
+      status("Generation failed: " + e.message + ". Check the backend URL/key (see server/README).", true);
+    } finally {
+      btn.disabled = false;
+    }
+  };
 })();
 
 /* ---------- Init ---------- */
